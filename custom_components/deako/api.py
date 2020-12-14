@@ -16,11 +16,10 @@ HEADERS = {"Content-type": "application/json; charset=UTF-8"}
 
 class IntegrationBlueprintApiClient:
     def __init__(
-        self, username: str, password: str, session: aiohttp.ClientSession
+        self, ip: str, session: aiohttp.ClientSession
     ) -> None:
         """Sample API Client."""
-        self._username = username
-        self._passeword = password
+        self._ip = ip
         self._session = session
 
     async def async_get_data(self) -> dict:

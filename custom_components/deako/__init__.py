@@ -16,9 +16,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import IntegrationBlueprintApiClient
 
+from .deako import Deako
+
 from .const import (
-    CONF_PASSWORD,
-    CONF_USERNAME,
+    CONF_IP,
     DOMAIN,
     PLATFORMS,
     STARTUP_MESSAGE,
@@ -33,18 +34,16 @@ async def async_setup(hass: HomeAssistant, config: Config):
     """Set up this integration using YAML is not supported."""
     return True
 
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up this integration using UI."""
     if hass.data.get(DOMAIN) is None:
         hass.data.setdefault(DOMAIN, {})
         _LOGGER.info(STARTUP_MESSAGE)
 
-    username = entry.data.get(CONF_USERNAME)
-    password = entry.data.get(CONF_PASSWORD)
+    ip = entry.data.get(CONF_IP)
 
     session = async_get_clientsession(hass)
-    client = IntegrationBlueprintApiClient(username, password, session)
+    client = IntegrationBlueprintApiClient(ip, session)
 
     coordinator = BlueprintDataUpdateCoordinator(hass, client=client)
     await coordinator.async_refresh()
