@@ -1,15 +1,10 @@
-import telnetlib
+from threading import Timer
 import socket
 import select
-import string
-import sys
 import threading
 import json
-import logging
 
-_LOGGER: logging.Logger = logging.getLogger(__package__)
-
-x = {
+device_list_dict = {
     "transactionId": "015c44d3-abec-4be0-bb0d-34adb4b81559",
     "type": "DEVICE_LIST",
     "dst": "deako",
@@ -24,7 +19,34 @@ state_change_dict = {
 }
 
 
+class RepeatedTimer(object):
+    def __init__(self, interval, function, *args, **kwargs):
+        self._timer = None
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+        self.is_running = False
+
+    def _run(self):
+        self.is_running = False
+        self.start()
+        self.function(*self.args)
+
+    def start(self):
+        if not self.is_running:
+            self._timer = Timer(self.interval, self._run)
+            self._timer.start()
+            self.is_running = True
+
+    def stop(self):
+        if self.is_running:
+            self._timer.cancel()
+            self.is_running = False
+
+
 class Deako:
+
     def __init__(self, ip, what, device_state_callback, callback, callback_param):
         self.device_state_callback = device_state_callback
         self.device_list_callback = callback
@@ -32,7 +54,38 @@ class Deako:
         self.src = what
         self.callback_param = callback_param
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
+        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
+        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+
         self.s.settimeout(2)
+        self.devices = {}
+        self.rt = RepeatedTimer(2,  self._internal_connect, self)
+
+    def update_state(self, uuid, power, dim=None):
+        if uuid is None:
+            return
+        if uuid not in self.devices:
+            self.find_devices()
+            return
+
+        self.devices[uuid]["state"]["power"] = power
+        self.devices[uuid]["state"]["dim"] = dim
+        self.device_state_callback(self, self.devices[uuid], self.callback_param)
+
+    def record_device(self, name, uuid, power, dim=None):
+        if uuid is None:
+            return
+        if uuid not in self.devices:
+            self.devices[uuid] = {}
+            self.devices[uuid]["state"] = {}
+
+        self.devices[uuid]["name"] = name
+        self.devices[uuid]["uuid"] = uuid
+        self.devices[uuid]["state"]["power"] = power
+        self.devices[uuid]["state"]["dim"] = dim
+        self.device_list_callback(self, self.devices[uuid], self.callback_param)
 
     def incoming_json(self, in_data):
         if in_data["type"] == "DEVICE_LIST":
@@ -41,19 +94,19 @@ class Deako:
             subdata = in_data["data"]
             state = subdata["state"]
             if "dim" in state:
-                self.device_list_callback(
-                    self, subdata["name"], subdata["uuid"], state["power"], state["dim"], self.callback_param)
+                self.record_device(
+                    subdata["name"], subdata["uuid"], state["power"], state["dim"])
             else:
-                self.device_list_callback(
-                    self, subdata["name"], subdata["uuid"], state["power"], None, self.callback_param)
+                self.record_device(
+                    subdata["name"], subdata["uuid"], state["power"])
         elif in_data["type"] == "EVENT":
             subdata = in_data["data"]
             state = subdata["state"]
             if "dim" in state:
-                self.device_state_callback(
-                    subdata["target"], state["power"], state["dim"])
+                self.update_state(subdata["target"],
+                                  state["power"], state["dim"])
             else:
-                self.device_state_callback(subdata["target"], state["power"])
+                self.update_state(subdata["target"], state["power"])
         else:
             print(json.dumps(in_data))
 
@@ -61,7 +114,7 @@ class Deako:
         leftovers = ""
 
         while 1:
-            socket_list = [sys.stdin, s]
+            socket_list = [s]
 
             # Get the list sockets which are readable
             read_sockets, write_sockets, error_sockets = select.select(
@@ -73,8 +126,8 @@ class Deako:
                     try:
                         data = sock.recv(1024)
                         if not data:
-                            print('Connection closed')
-                            sys.exit()
+                            self.rt.start()
+                            return
                         else:
                             raw_string = data.decode("utf-8")
                             list_of_items = raw_string.split("\r\n")
@@ -95,31 +148,31 @@ class Deako:
                                         leftovers = ""
                                     except json.decoder.JSONDecodeError:
                                         self.errors = 0
-                    except ConnectionResetError:
-                        self.connect()
+                    except:
+                        self.rt.start()
                         return
 
-    def connect(self):
+    def _internal_connect(self, this):
+        this.rt.stop()
 
         # connect to remote host
         try:
-            self.s.connect((self.ip, 23))
+            this.s.connect((this.ip, 23))
+            x = threading.Thread(target=this.read_func, args=(this.s,))
+            x.start()
+            this.find_devices()
         except:
-            print('Unable to connect')
-            sys.exit()
+            this.rt.start()
 
-        print('Connected to remote host')
-
-        x = threading.Thread(target=self.read_func, args=(self.s,))
-        x.start()
+    def connect(self):
+        self._internal_connect(self)
 
     def send_data(self, data_to_send):
         self.s.send(str.encode(data_to_send))
 
     def find_devices(self):
-        x["src"] = self.src
-        print("Sending device List Request")
-        self.send_data(json.dumps(x))
+        device_list_dict["src"] = self.src
+        self.send_data(json.dumps(device_list_dict))
 
     def send_device_control(self, uuid, power, dim=None):
         state_change = {
@@ -132,3 +185,6 @@ class Deako:
         state_change_dict["data"] = state_change
         state_change_dict["src"] = self.src
         self.send_data(json.dumps(state_change_dict))
+
+    def get_state_for_device(self, uuid):
+        return self.devices[uuid]["state"]

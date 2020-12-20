@@ -10,31 +10,27 @@ from homeassistant.components.light import (
 from .deako import Deako
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
-thisdict = {}
 mydevices = {}
 
-def got_state_callback(uuid, power, dim=None):
+def got_state_callback(connection, device, callback_param=None):
     _LOGGER.error("Got state!")
-    thisdict[uuid]["power"] = power
-    thisdict[uuid]["dim"] = dim
+    uuid = device["uuid"]
     mydevices[uuid].async_write_ha_state()
 
-def got_device_callback(connection, name, uuid, power, dim=None, callback_param=None):
-    _LOGGER.error("Got Device!")
-    if name is None:
-      return
-    if uuid is None:
-      return
-    if uuid not in thisdict:
-      thisdict[uuid] = {}
-    thisdict[uuid]["power"] = power
-    thisdict[uuid]["dim"] = dim
+def got_device_callback(connection, device, callback_param=None):
+    uuid = device["uuid"]
     
     if uuid not in mydevices:
-      mydevices[uuid] = IntegrationBlueprintBinarySensor(connection, uuid, name)
+      _LOGGER.error("Adding Device! " + device["name"] + " " + uuid)
+      mydevices[uuid] = IntegrationBlueprintBinarySensor(connection, uuid, device["name"])
+      _LOGGER.error("Added device! " + device["name"] + " " + uuid)
+    else:
+      mydevices[uuid].async_write_ha_state()
 
     if callback_param is not None:
       callback_param([mydevices[uuid]])
+    else:
+      _LOGGER.error("callback for adding devices is none, cannot add devices")
 
 async def async_setup_entry(hass, config, async_add_devices):
     """Configure the platform."""
@@ -43,7 +39,6 @@ async def async_setup_entry(hass, config, async_add_devices):
     connection = Deako(ip, "Home Assistant",
               got_state_callback, got_device_callback, async_add_devices)
     connection.connect()
-    connection.find_devices()
 
 class IntegrationBlueprintBinarySensor(LightEntity):
     """integration_blueprint binary_sensor class."""
@@ -66,31 +61,39 @@ class IntegrationBlueprintBinarySensor(LightEntity):
     @property
     def is_on(self):
         """Return true if the binary_sensor is on."""
-        return thisdict[self.uuid]["power"]
+        state = self.connection.get_state_for_device(self.uuid)
+        return state["power"]
 
     @property
     def brightness(self):
         """Return the brightness of this light between 0..255."""
-        if thisdict[self.uuid]["dim"] is None:
+        state = self.connection.get_state_for_device(self.uuid)
+        if state["dim"] is None:
             return None
-        return thisdict[self.uuid]["dim"] * 2.55
+        return state["dim"] * 2.55
 
     @property
     def supported_features(self):
         """Flag supported features."""
-        if thisdict[self.uuid]["dim"] is None:
+        state = self.connection.get_state_for_device(self.uuid)
+        if state["dim"] is None:
           return 0
         return SUPPORT_BRIGHTNESS
 
-
     async def async_turn_on(self, **kwargs):
+        state = self.connection.get_state_for_device(self.uuid)
         dim = 100
+        if state["dim"] is not None:
+          dim = state["dim"]
         if ATTR_BRIGHTNESS in kwargs:
           dim = (kwargs[ATTR_BRIGHTNESS] / 255) * 100
         self.connection.send_device_control(self.uuid, True, round(dim, 0))
 
     async def async_turn_off(self, **kwargs):
+        state = self.connection.get_state_for_device(self.uuid)
         dim = 100
+        if state["dim"] is not None:
+          dim = state["dim"]
         if ATTR_BRIGHTNESS in kwargs:
           dim = (kwargs[ATTR_BRIGHTNESS] / 255) * 100
         self.connection.send_device_control(self.uuid, False, round(dim, 0))
