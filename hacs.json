@@ -1,11 +1,9 @@
 {
-    "name": "Integration blueprint",
+    "name": "Deako",
     "hacs": "1.6.0",
     "domains": [
-        "binary_sensor",
-        "sensor",
-        "switch"
+        "light"
     ],
-    "iot_class": "Cloud Polling",
+    "iot_class": "Local Push",
     "homeassistant": "0.118.0"
 }

@@ -1,18 +1,17 @@
 {
     "config": {
-        "title": "Blueprint",
+        "title": "Deako",
         "step": {
             "user": {
-                "title": "Blueprint",
-                "description": "If you need help with the configuration have a look here: https://github.com/custom-components/integration_blueprint",
+                "title": "Deako",
+                "description": "If you need help with the configuration have a look here: https://github.com/sebirdman/deako_hass_integration",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "ip": "IP Address"
                 }
             }
         },
         "error": {
-            "auth": "Username/Password is wrong."
+            "auth": "IP is wrong."
         },
         "abort": {
             "single_instance_allowed": "Only a single configuration of Blueprint is allowed."
@@ -22,9 +21,7 @@
         "step": {
             "user": {
                 "data": {
-                    "binary_sensor": "Binary sensor enabled",
-                    "sensor": "Sensor enabled",
-                    "switch": "Switch enabled"
+                    "light": "Lights Enabled"
                 }
             }
         }

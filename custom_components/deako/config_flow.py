@@ -1,22 +1,19 @@
-"""Adds config flow for Blueprint."""
+"""Adds config flow for Deako."""
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import voluptuous as vol
 
-from .api import IntegrationBlueprintApiClient
 from .const import (
     CONF_IP,
     DOMAIN,
     PLATFORMS,
 )
 
-
-class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Blueprint."""
+class DeakoFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow for Deako."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
+    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
     def __init__(self):
         """Initialize."""
@@ -48,7 +45,7 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return BlueprintOptionsFlowHandler(config_entry)
+        return DeakoOptionsFlowHandler(config_entry)
 
     async def _show_config_form(self, user_input):  # pylint: disable=unused-argument
         """Show the configuration form to edit location data."""
@@ -65,8 +62,8 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return True
 
 
-class BlueprintOptionsFlowHandler(config_entries.OptionsFlow):
-    """Blueprint config flow options handler."""
+class DeakoOptionsFlowHandler(config_entries.OptionsFlow):
+    """Deako config flow options handler."""
 
     def __init__(self, config_entry):
         """Initialize HACS options flow."""
@@ -96,5 +93,5 @@ class BlueprintOptionsFlowHandler(config_entries.OptionsFlow):
     async def _update_options(self):
         """Update config entry options."""
         return self.async_create_entry(
-            title=self.config_entry.data.get(CONF_USERNAME), data=self.options
+            title=self.config_entry.data.get(CONF_IP), data=self.options
         )

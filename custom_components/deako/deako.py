@@ -3,6 +3,7 @@ import socket
 import select
 import threading
 import json
+import asyncio
 
 device_list_dict = {
     "transactionId": "015c44d3-abec-4be0-bb0d-34adb4b81559",
@@ -47,32 +48,32 @@ class RepeatedTimer(object):
 
 class Deako:
 
-    def __init__(self, ip, what, device_state_callback, callback, callback_param):
-        self.device_state_callback = device_state_callback
-        self.device_list_callback = callback
+    def __init__(self, ip, what):
         self.ip = ip
         self.src = what
-        self.callback_param = callback_param
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
-        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
-        self.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        self.s = None
 
-        self.s.settimeout(2)
         self.devices = {}
+        self.expected_devices = 0
         self.rt = RepeatedTimer(2,  self._internal_connect, self)
 
     def update_state(self, uuid, power, dim=None):
         if uuid is None:
             return
         if uuid not in self.devices:
-            self.find_devices()
             return
 
         self.devices[uuid]["state"]["power"] = power
         self.devices[uuid]["state"]["dim"] = dim
-        self.device_state_callback(self, self.devices[uuid], self.callback_param)
+
+        if "callback" not in self.devices[uuid]:
+            return
+        self.devices[uuid]["callback"]()
+
+    def set_state_callback(self, uuid, callback):
+        if uuid not in self.devices:
+            return
+        self.devices[uuid]["callback"] = callback
 
     def record_device(self, name, uuid, power, dim=None):
         if uuid is None:
@@ -85,11 +86,11 @@ class Deako:
         self.devices[uuid]["uuid"] = uuid
         self.devices[uuid]["state"]["power"] = power
         self.devices[uuid]["state"]["dim"] = dim
-        self.device_list_callback(self, self.devices[uuid], self.callback_param)
 
     def incoming_json(self, in_data):
         if in_data["type"] == "DEVICE_LIST":
-            print("Got device list")
+            subdata = in_data["data"]
+            self.expected_devices = subdata["number_of_devices"]
         elif in_data["type"] == "DEVICE_FOUND":
             subdata = in_data["data"]
             state = subdata["state"]
@@ -154,13 +155,17 @@ class Deako:
 
     def _internal_connect(self, this):
         this.rt.stop()
-
-        # connect to remote host
         try:
+            this.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            this.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
+            this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
+            this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+
+            this.s.settimeout(2)
             this.s.connect((this.ip, 23))
             x = threading.Thread(target=this.read_func, args=(this.s,))
             x.start()
-            this.find_devices()
         except:
             this.rt.start()
 
@@ -168,11 +173,23 @@ class Deako:
         self._internal_connect(self)
 
     def send_data(self, data_to_send):
-        self.s.send(str.encode(data_to_send))
+        if self.s is None:
+            return
 
-    def find_devices(self):
+        try:
+            self.s.send(str.encode(data_to_send))
+        except:
+            socket.close(self.s)
+            self.rt.start()
+
+    def get_devices(self):
+        return self.devices
+
+    async def find_devices(self):
         device_list_dict["src"] = self.src
         self.send_data(json.dumps(device_list_dict))
+        while(self.expected_devices == 0 or len(self.devices) != self.expected_devices):
+            await asyncio.sleep(1)
 
     def send_device_control(self, uuid, power, dim=None):
         state_change = {
@@ -185,6 +202,9 @@ class Deako:
         state_change_dict["data"] = state_change
         state_change_dict["src"] = self.src
         self.send_data(json.dumps(state_change_dict))
+
+    def get_name_for_device(self, uuid):
+        return self.devices[uuid]["name"] 
 
     def get_state_for_device(self, uuid):
         return self.devices[uuid]["state"]

@@ -1,4 +1,4 @@
-"""Constants for integration_blueprint."""
+"""Constants for Deako."""
 # Base component constants
 NAME = "Deako"
 DOMAIN = "deako"
@@ -18,15 +18,11 @@ PLATFORMS = [LIGHT]
 CONF_ENABLED = "enabled"
 CONF_IP = "ip"
 
-# Defaults
-DEFAULT_NAME = DOMAIN
-
-
 STARTUP_MESSAGE = f"""
 -------------------------------------------------------------------
 {NAME}
 Version: {VERSION}
-This is a custom integration!
+This is a custom integration for Deako!
 If you have any issues with this you need to open an issue here:
 {ISSUE_URL}
 -------------------------------------------------------------------
