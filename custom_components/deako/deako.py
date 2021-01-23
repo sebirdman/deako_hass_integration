@@ -179,17 +179,19 @@ class Deako:
         try:
             self.s.send(str.encode(data_to_send))
         except:
-            socket.close(self.s)
+            self.s.close()
             self.rt.start()
 
     def get_devices(self):
         return self.devices
 
-    async def find_devices(self):
+    async def find_devices(self, timeout = 10):
         device_list_dict["src"] = self.src
         self.send_data(json.dumps(device_list_dict))
-        while(self.expected_devices == 0 or len(self.devices) != self.expected_devices):
+        remaining = timeout
+        while(self.expected_devices == 0 or len(self.devices) != self.expected_devices and remaining > 0):
             await asyncio.sleep(1)
+            remaining -= 1
 
     def send_device_control(self, uuid, power, dim=None):
         state_change = {
@@ -204,7 +206,7 @@ class Deako:
         self.send_data(json.dumps(state_change_dict))
 
     def get_name_for_device(self, uuid):
-        return self.devices[uuid]["name"] 
+        return self.devices[uuid]["name"]
 
     def get_state_for_device(self, uuid):
         return self.devices[uuid]["state"]
