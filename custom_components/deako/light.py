@@ -71,7 +71,7 @@ class DeakoLightSwitch(LightEntity):
             dim = state["dim"]
         if ATTR_BRIGHTNESS in kwargs:
             dim = (kwargs[ATTR_BRIGHTNESS] / 255) * 100
-        self.connection.send_device_control(self.uuid, True, round(dim, 0))
+        await self.connection.send_device_control(self.uuid, True, round(dim, 0))
 
     async def async_turn_off(self, **kwargs):
         state = self.connection.get_state_for_device(self.uuid)
@@ -80,4 +80,4 @@ class DeakoLightSwitch(LightEntity):
             dim = state["dim"]
         if ATTR_BRIGHTNESS in kwargs:
             dim = (kwargs[ATTR_BRIGHTNESS] / 255) * 100
-        self.connection.send_device_control(self.uuid, False, round(dim, 0))
+        await self.connection.send_device_control(self.uuid, False, round(dim, 0))

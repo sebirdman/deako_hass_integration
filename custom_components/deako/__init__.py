@@ -38,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     ip = entry.data.get(CONF_IP)
 
     connection = Deako(ip, "Home Assistant")
-    connection.connect()
+    await connection.connect()
     await connection.find_devices()
 
     hass.data[DOMAIN][entry.entry_id] = connection
