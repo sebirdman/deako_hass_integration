@@ -11,7 +11,7 @@ device_list_dict = {
     "transactionId": "015c44d3-abec-4be0-bb0d-34adb4b81559",
     "type": "DEVICE_LIST",
     "dst": "deako",
-    "src": "ACME Corp"
+    "src": "ACME Corp",
 }
 
 state_change_dict = {
@@ -23,12 +23,12 @@ state_change_dict = {
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
-class ConnectionThread(Thread):
 
+class ConnectionThread(Thread):
     def set_callbacks(self, on_data_callback):
-        #self.connect_callback = connect_callback
+        # self.connect_callback = connect_callback
         self.on_data_callback = on_data_callback
-        #self.error_callback = error_callback
+        # self.error_callback = error_callback
 
     def connect(self, ip, port):
         self.ip = ip
@@ -60,11 +60,11 @@ class ConnectionThread(Thread):
 
     async def connect_socket(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #this.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        #this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
-        #this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
-        #this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
-        #this.s.settimeout(2)
+        # this.s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        # this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 1)
+        # this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
+        # this.s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+        # this.s.settimeout(2)
         await self.loop.sock_connect(self.socket, (self.ip, self.port))
 
     async def close_socket(self):
@@ -118,8 +118,17 @@ class ConnectionThread(Thread):
                 self.state = 2
 
 
-class Deako:
+async def control_device_worker(queue, callback):
+    while True:
+        control_params = await queue.get()
+        await callback(
+            control_params["uuid"], control_params["power"], control_params["dim"]
+        )
+        await asyncio.sleep(0.8)
+        queue.task_done()
 
+
+class Deako:
     def __init__(self, ip, what):
         self.ip = ip
         self.src = what
@@ -128,6 +137,12 @@ class Deako:
 
         self.devices = {}
         self.expected_devices = 0
+        self.control_device_req_queue = asyncio.Queue()
+        self.worker = asyncio.create_task(
+            control_device_worker(
+                self.control_device_req_queue, self.send_device_control_request
+            )
+        )
 
     def update_state(self, uuid, power, dim=None):
         if uuid is None:
@@ -157,17 +172,15 @@ class Deako:
                 state = subdata["state"]
                 if "dim" in state:
                     self.record_device(
-
-                        subdata["name"], subdata["uuid"], state["power"], state["dim"])
+                        subdata["name"], subdata["uuid"], state["power"], state["dim"]
+                    )
                 else:
-                    self.record_device(
-                        subdata["name"], subdata["uuid"], state["power"])
+                    self.record_device(subdata["name"], subdata["uuid"], state["power"])
             elif in_data["type"] == "EVENT":
                 subdata = in_data["data"]
                 state = subdata["state"]
                 if "dim" in state:
-                    self.update_state(subdata["target"],
-                                  state["power"], state["dim"])
+                    self.update_state(subdata["target"], state["power"], state["dim"])
                 else:
                     self.update_state(subdata["target"], state["power"])
         except:
@@ -193,27 +206,30 @@ class Deako:
     def get_devices(self):
         return self.devices
 
-    async def find_devices(self, timeout = 10):
+    async def find_devices(self, timeout=10):
         device_list_dict["src"] = self.src
         await self.connection.send_data(json.dumps(device_list_dict))
         remaining = timeout
-        while(self.expected_devices == 0 or len(self.devices) != self.expected_devices and remaining > 0):
+        while (
+            self.expected_devices == 0
+            or len(self.devices) != self.expected_devices
+            and remaining > 0
+        ):
             await asyncio.sleep(1)
             remaining -= 1
 
-    async def send_device_control(self, uuid, power, dim=None):
-        state_change = {
-            "target": uuid,
-            "state": {
-                "power": power,
-                "dim": dim
-            }
-        }
+    async def send_device_control_request(self, uuid, power, dim):
+        state_change = {"target": uuid, "state": {"power": power, "dim": dim}}
         state_change_dict["data"] = state_change
         state_change_dict["src"] = self.src
         await self.connection.send_data(json.dumps(state_change_dict))
         self.devices[uuid]["state"]["power"] = power
         self.devices[uuid]["state"]["dim"] = dim
+
+    async def send_device_control(self, uuid, power, dim=None):
+        await self.control_device_req_queue.put(
+            {"uuid": uuid, "power": power, "dim": dim}
+        )
 
     def get_name_for_device(self, uuid):
         return self.devices[uuid]["name"]
