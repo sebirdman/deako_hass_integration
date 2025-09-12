@@ -1,3 +1,7 @@
+This integration is now built into home assistant
+
+
+
 # Deako HASS integration
 
 Component to integrate with Deako using the public local api
@@ -27,3 +31,4 @@ Find an IP address of a deako device that is on your wifi, and input that into t
 ## Contributions are welcome!
 
 If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
+
